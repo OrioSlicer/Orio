@@ -1,0 +1,19 @@
+title: "[Print] "
+body:
+  - type: textarea
+    id: photos
+    attributes:
+      label: Your print
+      description: Photos or a short video, and what you printed.
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How Orio helped
+      description: Which Orio features you used (tilted layers, brick layers, painted speed...) and the settings that worked.
+  - type: input
+    id: setup
+    attributes:
+      label: Printer and filament
+      placeholder: "P1S, PLA Basic, 0.4 nozzle"

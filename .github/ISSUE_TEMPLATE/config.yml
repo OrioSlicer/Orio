@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Suggest an idea
+    url: https://github.com/OrioSlicer/Orio/discussions/categories/ideas
+    about: New features and improvements are discussed and voted on in Discussions.
+  - name: Ask a question
+    url: https://github.com/OrioSlicer/Orio/discussions/categories/q-a
+    about: Help with settings, LAN mode, printing problems.
+  - name: LAN mode guide
+    url: https://github.com/OrioSlicer/Orio/blob/main/docs/LAN-MODE.md
+    about: Connecting a Bambu Lab printer to Orio on your local network.

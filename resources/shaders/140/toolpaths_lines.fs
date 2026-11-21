@@ -1,0 +1,40 @@
+#version 140
+
+// normalized values for (-0.6/1.31, 0.6/1.31, 1./1.31)
+const vec3 LIGHT_TOP_DIR = vec3(-0.4574957, 0.4574957, 0.7624929);
+const vec3 LIGHT_FRONT_DIR = vec3(0.0, 0.0, 1.0);
+
+// x = ambient, y = top diffuse, z = front diffuse, w = global
+uniform vec4 light_intensity;
+uniform vec4 uniform_color;
+// Orio : coupe X/Y de l'apercu. Desactivee par defaut (u_clip_xy_enabled = 0) ;
+// une borne non coupee de u_clip_xy est repoussee tres loin (aucun rejet de ce cote).
+uniform float u_clip_xy_enabled;
+uniform vec4 u_clip_xy;
+
+in vec3 eye_normal;
+in vec2 v_clip_world_xy;
+
+out vec4 frag_color;
+
+void main()
+{
+    if (u_clip_xy_enabled > 0.5 &&
+        (v_clip_world_xy.x < u_clip_xy.x || v_clip_world_xy.x > u_clip_xy.y ||
+         v_clip_world_xy.y < u_clip_xy.z || v_clip_world_xy.y > u_clip_xy.w))
+        discard;
+
+    vec3 normal = normalize(eye_normal);
+
+    // Compute the cos of the angle between the normal and lights direction. The light is directional so the direction is constant for every vertex.
+    // Since these two are normalized the cosine is the dot product. Take the abs value to light the lines no matter in which direction the normal points.
+    float NdotL = abs(dot(normal, LIGHT_TOP_DIR));
+
+    float intensity = light_intensity.x + NdotL * light_intensity.y;
+
+    // Perform the same lighting calculation for the 2nd light source.
+    NdotL = abs(dot(normal, LIGHT_FRONT_DIR));
+    intensity += NdotL * light_intensity.z;
+
+    frag_color = vec4(uniform_color.rgb * light_intensity.w * intensity, uniform_color.a);
+}

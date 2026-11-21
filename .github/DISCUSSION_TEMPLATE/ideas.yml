@@ -1,0 +1,25 @@
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your idea! Please search first: if it already exists, upvote it and add your use case there.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to print or do?
+      description: The real situation behind the idea. Use cases are what decide priorities.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How Orio could help. Sketches, screenshots and links to other software are welcome.
+    validations:
+      required: true
+  - type: input
+    id: printer
+    attributes:
+      label: Printer
+      placeholder: "Bambu Lab X1C"
