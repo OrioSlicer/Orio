@@ -13,16 +13,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/OrioSlicer/Orio/releases/latest"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-Windows%2064--bit-00C2FF?style=for-the-badge&logo=windows&logoColor=white&labelColor=111316"></a>
+  <a href="https://github.com/OrioSlicer/Orio/releases/latest"><img alt="Download for Windows" src="media/button-download.svg" height="52"></a>
   &nbsp;
-  <a href="https://github.com/OrioSlicer/Orio/discussions"><img alt="Discussions" src="https://img.shields.io/badge/Ideas%20%26%20questions-Discussions-8A9099?style=for-the-badge&logo=github&logoColor=white&labelColor=111316"></a>
-</p>
-
-<p align="center">
-  <img alt="Latest release" src="https://img.shields.io/github/v/release/OrioSlicer/Orio?color=00C2FF&labelColor=111316">
-  <img alt="Downloads" src="https://img.shields.io/github/downloads/OrioSlicer/Orio/total?color=00C2FF&labelColor=111316">
-  <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-8A9099?labelColor=111316">
-  <img alt="Languages" src="https://img.shields.io/badge/languages-18-8A9099?labelColor=111316">
+  <a href="https://github.com/OrioSlicer/Orio/discussions"><img alt="Ideas and questions" src="media/button-discussions.svg" height="52"></a>
 </p>
 
 <p align="center"><img src="media/hero.gif" alt="A sliced vase in the Orio preview, cut open by a vertical section plane" width="900"></p>
