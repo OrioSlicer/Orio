@@ -643,8 +643,7 @@ void WebViewPanel::OnFreshLoginStatus(wxTimerEvent &event)
     if (mainframe && mainframe->m_webview == this)
         Slic3r::GUI::wxGetApp().get_login_info();
 
-    std::string phShow = wxGetApp().app_config->get("app", "show_print_history");
-
+    // Orio : plus d'historique d'impression du compte Bambu à demander ni à masquer ici (voir ShowUserPrintTask).
     if (wxGetApp().is_user_login())
     {
         if (m_loginstatus != 1)
@@ -656,12 +655,6 @@ void WebViewPanel::OnFreshLoginStatus(wxTimerEvent &event)
                 UpdateMakerworldLoginStatus();
             }
         }
-
-        if (m_TaskInfo == "" && m_browser && phShow != "false")
-        {
-            SetPrintHistoryTaskID(0);
-            ShowUserPrintTask(true);
-        }
     } else {
         if (m_loginstatus != 0) {
             m_loginstatus = 0;
@@ -669,8 +662,6 @@ void WebViewPanel::OnFreshLoginStatus(wxTimerEvent &event)
             if (m_onlinefirst)
                 SetMakerworldPageLoginStatus(false);
         }
-
-        if (m_TaskInfo != "" && m_browser) ShowUserPrintTask(false);
     }
 }
 
@@ -1182,79 +1173,11 @@ void WebViewPanel::get_4u_staffpick(int seed, int limit, std::function<void(std:
         int ret = agent->get_mw_user_4ulist(seed,limit,callback);
 }
 
-void WebViewPanel::ShowUserPrintTask(bool bShow, bool bForce)
-{
-    std::string phShow = wxGetApp().app_config->get("app", "show_print_history");
-    if (bShow && phShow == "false") bShow = false;
-
-    if (bShow)
-    {
-        NetworkAgent *agent = GUI::wxGetApp().getAgent();
-        if (agent && agent->is_user_login()) {
-            static long long PrintTaskMs = 0;
-
-            auto      now       = std::chrono::system_clock::now();
-            long long TmpMs     = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            long long nInterval = TmpMs - PrintTaskMs;
-            if (!bForce && nInterval < 1000 * 60 * 10) return;
-            PrintTaskMs = TmpMs;
-
-            BBL::TaskQueryParams task_query_params;
-            task_query_params.limit  = 5;
-            task_query_params.offset = 0;
-            int result               = agent->get_user_tasks(task_query_params, &m_TaskInfo);
-
-#if !BBL_RELEASE_TO_PUBLIC
-            BOOST_LOG_TRIVIAL(trace) << "task_manager: get_task_list task_info=" << m_TaskInfo;
-#endif
-
-            if (result == 0) {
-                try {
-                    json j = json::parse(m_TaskInfo);
-                    BOOST_LOG_TRIVIAL(trace) << "task_manager: get_task_list task count =" << j["hits"].size();
-
-                    auto body2 = from_u8(m_TaskInfo);
-                    body2.insert(1, "\"command\": \"printhistory_task_show\", ");
-                    WebView::RunScript(m_browserLeft, wxString::Format("window.postMessage(%s)", body2));
-                    RunScript(wxString::Format("window.postMessage(%s)", body2));
-
-                    SetLeftMenuShow("printhistory", 1);
-
-                    return;
-                } catch (...) {}
-            }
-            else
-                m_TaskInfo = "";
-        }
-    }
-    else
-    {
-        //Hide Left Menu
-        SetLeftMenuShow("printhistory", 0);
-        m_TaskInfo = "";
-
-        //Hide WebBrowser
-        if (m_contentname == "printhistory") SwitchLeftMenu("home");
-
-        //refresh url
-        // auto host = wxGetApp().get_model_http_url(wxGetApp().app_config->get_country_code());
-
-        //wxString language_code = wxString::FromUTF8(GetStudioLanguage()).BeforeFirst('_');
-
-        //wxString mw_OffUrl = (boost::format("%1%%2%/studio/print-history?from=bambustudio") % host % language_code.mb_str()).str();
-        //wxString Finalurl  = wxString::Format("%sapi/sign-out?to=%s", host, UrlEncode("about:blank"));
-
-        // m_browserPH->LoadURL(Finalurl);
-
-        SetPrintHistoryTaskID(0);
-        m_TaskInfo = "";
-
-        //First Enter False
-        m_printhistoryfirst = false;
-    }
-
-    return;
-}
+// Orio : l'historique d'impression du compte Bambu est retiré de l'accueil. get_user_tasks, synchrone, figeait
+// l'interface une quinzaine de secondes par appel quand les serveurs étaient injoignables (VPN), et la page le
+// demandait 3 fois à l'ouverture. Son bouton et son bloc, masqués par défaut dans la page, ne s'affichent donc plus ;
+// les « Récents », locaux, en tiennent lieu. La page envoie encore « homepage_printhistory_get » : ignoré ici.
+void WebViewPanel::ShowUserPrintTask(bool bShow, bool bForce) {}
 
 
 void WebViewPanel::update_mode()

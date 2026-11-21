@@ -922,15 +922,6 @@ wxBoxSizer *PreferencesDialog::create_item_checkbox(wxString title, wxWindow *pa
             }
         }
 
-        if (param == "show_print_history") {
-            auto show_history = app_config->get_bool("show_print_history");
-            if (show_history == true) {
-                if (wxGetApp().mainframe && wxGetApp().mainframe->m_webview) { wxGetApp().mainframe->m_webview->ShowUserPrintTask(true,true); }
-            } else {
-                if (wxGetApp().mainframe && wxGetApp().mainframe->m_webview) { wxGetApp().mainframe->m_webview->ShowUserPrintTask(false); }
-            }
-        }
-
         if (param == "enable_lod") {
             if (wxGetApp().plater()->is_project_dirty()) {
                 auto result = MessageDialog(static_cast<wxWindow *>(this), _L("The current project has unsaved changes, save it before continuing?"),
@@ -1403,7 +1394,7 @@ wxWindow* PreferencesDialog::create_general_page()
     // auto item_backup = create_item_switch(_L("Backup switch"), page, _L("Backup switch"), "units");
     auto item_modelmall = create_item_checkbox(_L("Show online staff-picked models on the home page"), page, _L("Show online staff-picked models on the home page"), 50, "staff_pick_switch");
 
-    auto item_show_history = create_item_checkbox(_L("Show history on the home page"), page, _L("Show history on the home page"), 50, "show_print_history");
+    // Orio : case « Show history on the home page » retirée avec l'historique d'impression Bambu de l'accueil.
 
     std::vector<wxString>  air_temp_timing_list = {_L("Reminder During Slicing"), _L("Automatic mode")};
     std::vector<std::string> air_temp_timing_value_list = {"slicing", "auto"};
@@ -1496,13 +1487,11 @@ wxWindow* PreferencesDialog::create_general_page()
 #endif // _WIN32
     auto item_title_modelmall   = sizer_page->Add(title_modelmall, 0, wxTOP | wxEXPAND, FromDIP(20));
     auto item_item_modelmall    = sizer_page->Add(item_modelmall, 0, wxTOP, FromDIP(3));
-    auto item_item_show_history = sizer_page->Add(item_show_history, 0, wxTOP, FromDIP(3));
 
-    auto update_modelmall = [this, item_title_modelmall, item_item_modelmall, item_item_show_history](wxEvent &e) {
+    auto update_modelmall = [this, item_title_modelmall, item_item_modelmall](wxEvent &e) {
         bool has_model_mall = wxGetApp().has_model_mall();
         item_title_modelmall->Show(has_model_mall);
         item_item_modelmall->Show(has_model_mall);
-        item_item_show_history->Show(has_model_mall);
         Layout();
         Fit();
     };
