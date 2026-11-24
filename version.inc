@@ -8,7 +8,7 @@ set(SLIC3R_APP_NAME "Orio")
 set(SLIC3R_APP_KEY "Orio")
 
 # Version propre à Orio, affichée dans « À propos ».
-set(ORIO_VERSION "1.0.0")
+set(ORIO_VERSION "1.0.1")
 
 # Build public par défaut : serveurs Bambu de production, pas de menus internes.
 if(NOT DEFINED BBL_RELEASE_TO_PUBLIC)
