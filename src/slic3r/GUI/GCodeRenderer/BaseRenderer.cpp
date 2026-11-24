@@ -239,6 +239,22 @@ namespace Slic3r
                 int extra_frames{ 0 };
             };
 
+            // Orio : ce que la legende affiche pour l'objet clique dans l'Apercu (ses lignes du G-code, entre
+            // "start / stop printing object"), et les totaux du plateau par type de ligne pour la colonne "Part du plateau"
+            struct PickedStats
+            {
+                unsigned int result_id{ 0 };
+                int label{ -1 };
+                std::string name;
+                PrintEstimatedStatistics stats;
+                PrintStatistics ps;
+                // part de la piece dans le temps du plateau, par type de ligne et pour les trajets
+                std::map<ExtrusionRole, float> time_share;
+                float travel_share{ 0.0f };
+                // types de ligne de la piece, a la place de ceux du plateau dans la legende
+                std::vector<ExtrusionRole> roles;
+            };
+
             BaseRenderer::BaseRenderer()
             {
                 m_moves_slider = new IMSlider(0, 0, 0, 100, wxSL_HORIZONTAL);
@@ -862,14 +878,14 @@ namespace Slic3r
 
             int BaseRenderer::layer_fusion_clip_label() const
             {
-                if (m_view_type != EViewType::LayerFusion || m_layer_fusion_label < 0)
+                if (m_view_type != EViewType::LayerFusion || m_picked_label < 0)
                     return -1;
                 const ModelObjectPtrs& objects = wxGetApp().plater()->model().objects;
                 for (const GLVolume* v : m_shells.volumes.volumes) {
                     const int o = v->object_idx(), i = v->instance_idx();
                     if (!v->is_wipe_tower && o >= 0 && o < int(objects.size()) && i >= 0 && i < int(objects[o]->instances.size()) &&
-                        int(objects[o]->instances[i]->get_labeled_id()) == m_layer_fusion_label)
-                        return m_layer_fusion_label;
+                        int(objects[o]->instances[i]->get_labeled_id()) == m_picked_label)
+                        return m_picked_label;
                 }
                 return -1;
             }
@@ -1882,6 +1898,10 @@ namespace Slic3r
                 // legende montre le tranchage d'avant de ce plateau : ses donnees sont echangees avec celles du
                 // tranchage courant le temps de ce rendu (avant tout calcul), puis remises en place en sortant.
                 SliceSnapshot* prev_slice = update_slice_history();
+                // Orio : objet clique dans l'Apercu : la legende montre ses statistiques (sans tranchage precedent)
+                const bool show_picked = update_picked_stats();
+                if (show_picked)
+                    prev_slice = nullptr;
                 const bool show_prev_slice = prev_slice != nullptr && m_slice_history->held && !m_fold;
                 if (show_prev_slice)
                     swap_with_slice_snapshot(*prev_slice);
@@ -1890,6 +1910,20 @@ namespace Slic3r
                     std::function<void()> restore;
                     ~PrevSliceRestore() { if (restore) restore(); }
                 } prev_slice_restore{ show_prev_slice ? std::function<void()>([this, prev_slice]() { swap_with_slice_snapshot(*prev_slice); }) : std::function<void()>() };
+                const auto swap_picked = [this]() {
+                    std::swap(m_print_statistics, m_picked_stats->stats);
+                    m_roles.swap(m_picked_stats->roles);
+                };
+                if (show_picked)
+                    swap_picked();
+                PrevSliceRestore picked_restore{ show_picked ? std::function<void()>(swap_picked) : std::function<void()>() };
+                // Orio : la legende change de contenu au choix d'une piece : une image de plus pour qu'elle prenne sa
+                // taille (sinon une image avec la taille d'avant, contenu coupe)
+                static bool s_last_show_picked = false;
+                if (s_last_show_picked != show_picked) {
+                    s_last_show_picked = show_picked;
+                    wxGetApp().imgui()->set_requires_extra_frame();
+                }
                 const ImVec4 prev_slice_text_color = m_is_dark ? ImVec4(1.00f, 0.71f, 0.20f, 1.00f) : ImVec4(0.80f, 0.42f, 0.00f, 1.00f);
                 const Size cnv_size = wxGetApp().plater()->get_current_canvas3D()->get_canvas_size();
                 auto group_result = DevUtilBackend::GetNozzleGroupResult(wxGetApp().plater());
@@ -1929,7 +1963,17 @@ namespace Slic3r
                 ImGui::SetNextWindowBgAlpha(0.8f);
                 const float max_height = 0.75f * static_cast<float>(cnv_size.get_height());
                 const float child_height = 0.3333f * max_height;
-                ImGui::SetNextWindowSizeConstraints({ 0.0f, 0.0f }, { -1.0f, max_height });
+                // Orio : la legende garde sa taille avec ou sans piece choisie (et tranchage precedent) : la plus
+                // grande vue pour ce tranchage et cette vue (repliee : rien)
+                static std::map<int, ImVec2> s_legend_min_size;
+                static unsigned int s_legend_min_result = (unsigned int)-1;
+                if (s_legend_min_result != m_last_result_id) {
+                    s_legend_min_size.clear();
+                    s_legend_min_result = m_last_result_id;
+                }
+                const ImVec2 legend_min = m_fold ? ImVec2(0.0f, 0.0f) : s_legend_min_size[int(m_view_type)];
+                // (max.x negatif : ImGui ignorerait le minimum en largeur)
+                ImGui::SetNextWindowSizeConstraints({ legend_min.x, std::min(legend_min.y, max_height) }, { FLT_MAX, max_height });
                 // Orio : lisere bleu des fenetres d'outils (ImGuiWrapper::begin_tool_window), dessine par Begin
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, std::max(1.0f, 1.5f * m_scale));
                 ImGui::PushStyleColor(ImGuiCol_Border, ImGuiWrapper::COL_BAMBU);
@@ -2204,10 +2248,19 @@ namespace Slic3r
                     for (size_t i = 0; i < title_offsets.size(); i++) {
                         ImGui::SameLine(title_offsets[i].second);
                         imgui.bold_text(title_offsets[i].first);
-                        //Orio: what the two values of the Percent column are.
-                        if (title_offsets[i].first == _u8L("Percent") && ImGui::IsItemHovered())
-                            imgui.tooltip(_u8L("Share of the print time / share of the filament used, for the line types that extrude").c_str(),
-                                          ImGui::GetFontSize() * 20.f);
+                        //Orio: a (?) says what the two values of the Percent column are, in a tooltip with a blue border
+                        //(hard to tell from the legend behind it otherwise).
+                        if (title_offsets[i].first == _u8L("Percent")) {
+                            ImGui::SameLine();
+                            ImGui::TextDisabled("(?)");
+                            if (ImGui::IsItemHovered()) {
+                                ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+                                ImGui::PushStyleColor(ImGuiCol_Border, ImGuiWrapper::COL_BAMBU);
+                                imgui.tooltip(_u8L("time / material").c_str(), ImGui::GetFontSize() * 20.f);
+                                ImGui::PopStyleColor(1);
+                                ImGui::PopStyleVar(1);
+                            }
+                        }
                     }
                     ImGui::SameLine();
                     ImGui::Dummy({ window_padding, 0 });
@@ -2353,7 +2406,38 @@ namespace Slic3r
                 // Orio : tranchage precedent affiche -> son titre, avec l'heure ou il a ete affiche
                 if (show_prev_slice)
                     title = _u8L("Previous slice") + " (" + prev_slice->time_label + ")";
+                // Orio : piece choisie : "Resultat de la decoupe pour <piece>", nom raccourci pour tenir avec sa croix
+                // dans la place du titre normal (devant le bouton de repli)
+                if (show_picked) {
+                    const float room = (imgui.calc_text_size("ABCD").x + 18.0f * m_scale) * 8.0f - 18.0f * m_scale -
+                                       imgui.calc_text_size("\xC3\x97").x - ImGui::GetStyle().FramePadding.x * 2.0f - ImGui::GetStyle().ItemSpacing.x;
+                    std::string name = m_picked_stats->name;
+                    auto with_name = [](const std::string& n) { return (boost::format(_u8L("Slicing Result for %1%")) % n).str(); };
+                    // gras plus large que la police normale mesuree : 10 % de marge
+                    while (!name.empty() && imgui.calc_text_size(with_name(name + "...")).x * 1.1f > room) {
+                        // un caractere UTF-8 entier : ses octets de suite puis son premier octet
+                        while (!name.empty() && (static_cast<unsigned char>(name.back()) & 0xC0) == 0x80)
+                            name.pop_back();
+                        if (!name.empty())
+                            name.pop_back();
+                    }
+                    title = with_name(name.size() == m_picked_stats->name.size() ? name : name + "...");
+                }
                 imgui.bold_text(title);
+                // Orio : piece choisie : une croix bleue rend la legende au plateau entier
+                if (show_picked) {
+                    ImGui::SameLine();
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImGuiWrapper::COL_BAMBU);
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+                    const bool close = ImGui::SmallButton("\xC3\x97##picked_close");
+                    ImGui::PopStyleColor(2);
+                    if (close) {
+                        m_picked_label = -1;
+                        imgui.set_requires_extra_frame();
+                    }
+                    if (ImGui::IsItemHovered())
+                        imgui.tooltip(_u8L("Back to the statistics of the whole plate (Esc)"), ImGui::GetFontSize() * 20.f);
+                }
                 // Orio : bord droit du titre affiche (repere fenetre)
                 const float title_right = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x + ImGui::GetScrollX();
 
@@ -2365,7 +2449,7 @@ namespace Slic3r
                 // Orio : l'ecart ci-dessus compte le titre en police normale alors qu'il est dessine en gras :
                 // plus long, le titre "Tranchage precedent (hh:mm)" pousserait le bouton de repli et elargirait le
                 // panneau. Le bouton de repli garde donc la place qu'il a avec le titre normal (sans chevaucher le titre).
-                if (!show_prev_slice)
+                if (!show_prev_slice && !show_picked)
                     m_slice_history->fold_button_x = ImGui::GetCursorPosX();
                 else if (m_slice_history->fold_button_x > 0.0f)
                     ImGui::SameLine(std::max(m_slice_history->fold_button_x, title_right + spacing));
@@ -2500,7 +2584,8 @@ namespace Slic3r
                 int displayed_columns = 0;
                 std::map<std::string, float> color_print_offsets;
                 // Orio : totaux du tranchage precedent quand il est affiche
-                const PrintStatistics& ps = show_prev_slice ? prev_slice->print_stats : wxGetApp().plater()->get_partplate_list().get_current_fff_print().print_statistics();
+                const PrintStatistics& ps = show_prev_slice ? prev_slice->print_stats :
+                                            show_picked ? m_picked_stats->ps : wxGetApp().plater()->get_partplate_list().get_current_fff_print().print_statistics();
                 double koef = imperial_units ? GizmoObjectManipulation::in_to_mm : 1000.0;
                 double unit_conver = imperial_units ? GizmoObjectManipulation::oz_to_g : 1;
                 // used filament statistics
@@ -2616,8 +2701,13 @@ namespace Slic3r
                             percent > 0.001 ? ::sprintf(buffer, "%.1f%%", percent * 100) : ::sprintf(buffer, "<0.1%%");
                         travel_percent = buffer;
                     }
-                    offsets = calculate_offsets({ {_u8L("Line Type"), labels}, {_u8L("Time"), times}, {_u8L("Percent"), percents}, {_u8L("Used filament"), used_filaments_m}, {"", used_filaments_g}, {_u8L("Display"), {""}} }, icon_size + card_icon_w);
-                    append_headers({ {_u8L("Line Type"), offsets[0]}, {_u8L("Time"), offsets[1]}, {_u8L("Percent"), offsets[2]}, {_u8L("Used filament"), offsets[3]}, {"", offsets[4]}, {_u8L("Display"), offsets[5]} });
+                    // Orio : piece choisie : meme colonne Pourcentage, calculee sur la piece seule (stats echangees)
+                    const std::string percent_title = _u8L("Percent");
+                    // Orio : la colonne fait aussi la place du (?) du titre
+                    std::vector<std::string> percent_cells = percents;
+                    percent_cells.push_back(percent_title + " (?)");
+                    offsets = calculate_offsets({ {_u8L("Line Type"), labels}, {_u8L("Time"), times}, {percent_title, percent_cells}, {_u8L("Used filament"), used_filaments_m}, {"", used_filaments_g}, {_u8L("Display"), {""}} }, icon_size + card_icon_w);
+                    append_headers({ {_u8L("Line Type"), offsets[0]}, {_u8L("Time"), offsets[1]}, {percent_title, offsets[2]}, {_u8L("Used filament"), offsets[3]}, {"", offsets[4]}, {_u8L("Display"), offsets[5]} });
                     break;
                 }
                 case EViewType::Height: { imgui.title(_u8L("Layer Height (mm)")); break; }
@@ -2945,12 +3035,14 @@ namespace Slic3r
                         append_item(EItemType::None, m_tools.m_tool_colors[0], columns_offsets, true, true, nullptr, cell_keys);
                     }
                     //BBS display filament change times
+                    if (!show_picked) { // Orio : pas compte par objet
                     ImGui::Dummy({ window_padding, window_padding });
                     ImGui::SameLine();
                     imgui.text(_u8L("Filament change times") + ":");
                     ImGui::SameLine();
                     ::sprintf(buf, "%d", m_print_statistics.total_filament_changes);
                     value_text(legend_cell_key("fil", -1, "changes"), buf);
+                    }
                     //BBS display cost
                     ImGui::Dummy({ window_padding, window_padding });
                     ImGui::SameLine();
@@ -3272,7 +3364,7 @@ namespace Slic3r
                     double timelapse_time = 0.f;
                     if (show_prev_slice) // Orio : tranchage precedent
                         timelapse_time = prev_slice->timelapse_time;
-                    else if (auto timelapse_time_iter = m_gcode_result->skippable_part_time.find(SkipType::stTimelapse); timelapse_time_iter != m_gcode_result->skippable_part_time.end()) {
+                    else if (auto timelapse_time_iter = m_gcode_result->skippable_part_time.find(SkipType::stTimelapse); !show_picked && timelapse_time_iter != m_gcode_result->skippable_part_time.end()) {
                         timelapse_time = timelapse_time_iter->second;
                     }
                     ImGui::Dummy(ImVec2(0.0f, ImGui::GetFontSize() * 0.1));
@@ -3360,30 +3452,8 @@ namespace Slic3r
                     imgui.text(total_str + ":");
                     ImGui::SameLine(max_len);
                     value_text(legend_cell_key("time", 0, "total"), short_time(get_time_dhms(time_mode.time)));
-                    auto show_mode_button = [this, &imgui, can_show_mode_button](const wxString& label, PrintEstimatedStatistics::ETimeMode mode) {
-                        if (can_show_mode_button(mode)) {
-                            if (imgui.button(label)) {
-                                m_time_estimate_mode = mode;
-#if ENABLE_ENHANCED_IMGUI_SLIDER_FLOAT
-                                imgui.set_requires_extra_frame();
-#else
-                                wxGetApp().plater()->get_current_canvas3D()->set_as_dirty();
-                                wxGetApp().plater()->get_current_canvas3D()->request_extra_frame();
-#endif // ENABLE_ENHANCED_IMGUI_SLIDER_FLOAT
-                            }
-                        }
-                        };
-                    switch (m_time_estimate_mode) {
-                    case PrintEstimatedStatistics::ETimeMode::Normal: {
-                        show_mode_button(_L("Switch to silent mode"), PrintEstimatedStatistics::ETimeMode::Stealth);
-                        break;
-                    }
-                    case PrintEstimatedStatistics::ETimeMode::Stealth: {
-                        show_mode_button(_L("Switch to normal mode"), PrintEstimatedStatistics::ETimeMode::Normal);
-                        break;
-                    }
-                    default: { assert(false); break; }
-                    }
+                    // Orio : pas de bouton "Passer en mode silencieux" (estimation avec les limites silencieuses de la
+                    // machine, demande de l'utilisateur) : temps du mode normal seulement
                 }
                 if (m_view_type == EViewType::ColorPrint) {
                     ImGui::Spacing();
@@ -3393,6 +3463,23 @@ namespace Slic3r
                     append_headers({ {_u8L("Options"), offsets[0] }, { _u8L("Display"), offsets[1]} });
                     for (auto item : options_items)
                         append_option_item(item, offsets);
+                }
+                // Orio : piece choisie : ce qui n'est pas compte pour elle, en liste
+                if (show_picked) {
+                    ImGui::Dummy({ window_padding, window_padding });
+                    ImGui::SameLine();
+                    imgui.text_colored(prev_slice_text_color, _u8L("Not counted for this part:"));
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(?)");
+                    if (ImGui::IsItemHovered())
+                        imgui.tooltip(_u8L("These expenses are shared by the whole plate. For this part, the travels count only from one of its lines to another "
+                                           "of its lines in the same layer.").c_str(),
+                                      ImGui::GetFontSize() * 20.f);
+                    for (const std::string& item : { _u8L("travels between parts"), _u8L("prime tower"), _u8L("purges"), _u8L("start of the print") }) {
+                        ImGui::Dummy({ window_padding, window_padding });
+                        ImGui::SameLine();
+                        imgui.text_colored(prev_slice_text_color, "- " + item);
+                    }
                 }
                 ImGui::Dummy({ window_padding, window_padding });
                 if (m_nozzle_nums > 1)
@@ -3439,6 +3526,10 @@ namespace Slic3r
                 render_prev_slice_button(prev_slice, show_prev_slice, window_padding * 3);
                 ImGui::Dummy({ window_padding, window_padding });
                 legend_height = ImGui::GetCurrentWindow()->Size.y;
+                if (!m_fold) {
+                    ImVec2& seen = s_legend_min_size[int(m_view_type)];
+                    seen = ImVec2(std::max(seen.x, ImGui::GetCurrentWindow()->Size.x), std::max(seen.y, ImGui::GetCurrentWindow()->Size.y));
+                }
                 if (show_prev_slice)
                     ImGui::PopStyleColor(1);
                 imgui.end();
@@ -3569,6 +3660,98 @@ namespace Slic3r
                     plate.last = std::move(snapshot);
                 }
                 return plate.previous.get();
+            }
+
+            // Orio : statistiques de l'objet clique, en un passage sur les mouvements du G-code. Ses extrusions sont
+            // celles de son label ; ses trajets, ceux entre deux de ses extrusions de la meme couche (les trajets d'une
+            // piece a l'autre, la tour de purge, les purges et le debut ne sont a personne). Temps : les MoveVertex::time
+            // sont des secondes entieres (inutilisables mouvement par mouvement) ; chaque mouvement compte pour sa
+            // longueur / sa vitesse, et sa part ainsi estimee dans un type de ligne repartit le temps du plateau pour ce
+            // type (celui du processeur, affiche par la legende normale).
+            bool BaseRenderer::update_picked_stats()
+            {
+                if (m_picked_label < 0 || m_gcode_result == nullptr || (int)m_last_result_id == -1 || !can_hide_object(m_picked_label))
+                    return false;
+                if (m_picked_stats && m_picked_stats->result_id == m_last_result_id && m_picked_stats->label == m_picked_label)
+                    return true;
+                auto s = std::make_shared<PickedStats>();
+                s->result_id = m_last_result_id;
+                s->label = m_picked_label;
+                const ModelObjectPtrs& objects = wxGetApp().plater()->model().objects;
+                for (const GLVolume* v : m_shells.volumes.volumes) {
+                    const int o = v->object_idx(), i = v->instance_idx();
+                    if (!v->is_wipe_tower && o >= 0 && o < int(objects.size()) && i >= 0 && i < int(objects[o]->instances.size()) &&
+                        int(objects[o]->instances[i]->get_labeled_id()) == m_picked_label)
+                        s->name = objects[o]->name;
+                }
+                s->ps = wxGetApp().plater()->get_partplate_list().get_current_fff_print().print_statistics();
+                s->ps.total_used_filament = s->ps.total_weight = s->ps.total_cost = 0.0;
+                PrintEstimatedStatistics& st = s->stats;
+                std::map<ExtrusionRole, double> plate_est, part_est;
+                double plate_travel_est = 0.0, part_travel_est = 0.0, pending = 0.0;
+                int last_label = -1;
+                float last_z = -1.0f;
+                const std::vector<GCodeProcessorResult::MoveVertex>& moves = m_gcode_result->moves;
+                for (size_t i = 1; i < moves.size(); ++i) {
+                    const GCodeProcessorResult::MoveVertex& m = moves[i];
+                    const double est = m.feedrate > 0.0f ? (m.position - moves[i - 1].position).norm() / m.feedrate : 0.0;
+                    if (m.type == EMoveType::Travel) {
+                        plate_travel_est += est;
+                        pending += est;
+                        continue;
+                    }
+                    if (m.type != EMoveType::Extrude)
+                        continue;
+                    const bool mine = m.object_label_id == m_picked_label;
+                    if (mine && last_label == m_picked_label && std::abs(m.print_z - last_z) < EPSILON)
+                        part_travel_est += pending;
+                    pending = 0.0;
+                    last_label = m.object_label_id;
+                    last_z = m.print_z;
+                    const ExtrusionRole role = m.extrusion_role;
+                    plate_est[role] += est;
+                    const size_t f = m.extruder_id;
+                    if (!mine || f >= m_filament_diameters.size() || f >= m_filament_densities.size())
+                        continue;
+                    part_est[role] += est;
+                    const double volume = m.delta_extruder * PI * sqr(0.5 * m_filament_diameters[f]);
+                    const double grams = volume * m_filament_densities[f] * 0.001;
+                    std::pair<double, double>& used = st.used_filaments_per_role[role];
+                    used.first += m.delta_extruder * 0.001;
+                    used.second += grams;
+                    (is_support(role) ? st.support_volumes_per_extruder : st.model_volumes_per_extruder)[f] += volume;
+                    s->ps.total_used_filament += m.delta_extruder;
+                    s->ps.total_weight += grams;
+                    if (f < m_gcode_result->filament_costs.size())
+                        s->ps.total_cost += grams * m_gcode_result->filament_costs[f] * 0.001;
+                }
+                for (const auto& [role, est] : part_est)
+                    s->time_share[role] = plate_est[role] > 0.0 ? float(est / plate_est[role]) : 0.0f;
+                s->travel_share = plate_travel_est > 0.0 ? float(part_travel_est / plate_travel_est) : 0.0f;
+                for (size_t k = 0; k < 2; ++k) {
+                    const PrintEstimatedStatistics::Mode& plate = m_print_statistics.modes[k];
+                    PrintEstimatedStatistics::Mode& mode = st.modes[k];
+                    mode.time = 0.0f;
+                    for (const auto& [role, time] : plate.roles_times)
+                        if (auto it = s->time_share.find(role); it != s->time_share.end() && it->second > 0.0f) {
+                            mode.roles_times.push_back({ role, time * it->second });
+                            mode.time += time * it->second;
+                        }
+                    float travel = 0.0f;
+                    for (const auto& [type, time] : plate.moves_times)
+                        if (type == EMoveType::Travel)
+                            travel = time * s->travel_share;
+                    mode.moves_times = { { EMoveType::Travel, travel } };
+                    mode.time += travel;
+                    // seulement pour la mise en page des temps du bas de la legende
+                    mode.layers_times = plate.layers_times;
+                }
+                // Orio : seulement les types de ligne de la piece (temps ou filament), comme la legende normale
+                for (ExtrusionRole role : m_roles)
+                    if (part_est.count(role) > 0 || st.used_filaments_per_role.count(role) > 0)
+                        s->roles.push_back(role);
+                m_picked_stats = s;
+                return true;
             }
 
             // Orio : echange tout ce que lit la legende (hors totaux du plateau et temps de timelapse, lus
@@ -4715,10 +4898,10 @@ namespace Slic3r
                 const Model& model = wxGetApp().plater()->model();
                 const ModelObject* object = nullptr;
                 auto on_plate = [res](const ModelObject* mo) { return mo != nullptr && res->objects.count(mo->id().id) > 0; };
-                if (m_layer_fusion_label >= 0)
+                if (m_picked_label >= 0)
                     for (const ModelObject* mo : model.objects)
                         for (const ModelInstance* mi : mo->instances)
-                            if (int(mi->get_labeled_id()) == m_layer_fusion_label && on_plate(mo))
+                            if (int(mi->get_labeled_id()) == m_picked_label && on_plate(mo))
                                 object = mo;
                 const int idx = wxGetApp().plater()->get_selection().get_object_idx();
                 if (object == nullptr && idx >= 0 && idx < int(model.objects.size()) && on_plate(model.objects[idx]))

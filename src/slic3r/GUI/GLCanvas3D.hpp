@@ -1220,8 +1220,9 @@ private:
     };
     std::map<const TriangleMesh*, HideEyeMesh> m_hide_eye_meshes;
     int                  m_hide_eye_label{ -1 };
-    // Orio : objet clique dans l'Apercu pour la vue "Fusion de couche" (label du G-code, -1 : aucun), encadre en blanc
-    int                  m_layer_fusion_label{ -1 };
+    // Orio : objet sous la souris, celui qu'un clic choisit (label du G-code, -1 : aucun). L'objet choisi est tenu par le
+    // rendu de l'Apercu (GCodeViewer::get_picked_label) : cadre blanc, oeil garde, ses statistiques dans la legende.
+    int                  m_hover_pick_label{ -1 };
     std::array<float, 4> m_hide_eye_rect{ { 0.f, 0.f, 0.f, 0.f } };
     std::array<float, 4> m_hide_eye_object_rect{ { 0.f, 0.f, 0.f, 0.f } };
     std::string m_sidebar_field;
@@ -1986,7 +1987,7 @@ private:
     void _render_stale_slice_card();
     //Orio: eye on the center of mass of the object hovered in the Preview: hides its toolpaths (faint shell kept).
     void _render_object_hide_eye();
-    void _render_layer_fusion_frame();
+    void _render_picked_object_frame();
     // Reads the supports from the result of the slicing of the plates, returns false if there is none.
     bool _read_sliced_supports();
     //Orio: the cut of the Prepare tab is available (no gizmo other than move / rotate / scale, no height tool).

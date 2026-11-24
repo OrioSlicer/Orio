@@ -84,8 +84,10 @@ namespace Slic3r {
                 bool can_hide_object(int label) const;
                 bool is_object_hidden(int label) const;
                 void set_object_hidden(int label, bool hidden);
-                // Orio : objet clique dans l'Apercu pour l'encart de la vue "Fusion de couche"
-                void set_layer_fusion_label(int label);
+                // Orio : objet clique dans l'Apercu (label du G-code, -1 : aucun) : cadre blanc, oeil garde, ses
+                // statistiques dans la legende, l'encart de la vue "Fusion de couche"
+                int  get_picked_label() const;
+                void set_picked_label(int label);
                 void set_scale(float scale = 1.0);
                 // Orio: the vertical sliders drawn as in a view of this size (BaseRenderer::set_vertical_sliders_view)
                 void set_vertical_sliders_view(int width, int height);

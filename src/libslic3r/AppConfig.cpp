@@ -159,8 +159,9 @@ void AppConfig::set_defaults()
 #endif // _WIN32
     }
 
+    //Orio: orthogonal view by default.
     if (get("use_perspective_camera").empty())
-        set_bool("use_perspective_camera", true);
+        set_bool("use_perspective_camera", false);
 
 #ifdef SUPPORT_FREE_CAMERA
     if (get("use_free_camera").empty())

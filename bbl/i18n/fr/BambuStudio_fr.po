@@ -24576,8 +24576,6 @@ msgstr "Jusqu'où les couleurs peintes sur le dessus et le dessous entrent dans 
 # Orio : Coloration, plage de hauteur comptee par le haut
 msgid "Top:"
 msgstr "Haut :"
-msgid "Share of the print time / share of the filament used, for the line types that extrude"
-msgstr "Part du temps d'impression / part du filament utilisé, pour les types de ligne qui extrudent"
 
 msgid "Mixes"
 msgstr "Mélange"
@@ -26073,3 +26071,38 @@ msgstr "Mêmes valeurs, en moyenne sur toutes les couches de la pièce (pondér�
 
 msgid "Click an object to see its contact areas."
 msgstr "Cliquez sur un objet pour voir ses surfaces de contact."
+
+
+msgid "Back to the statistics of the whole plate (Esc)"
+msgstr "Revenir aux statistiques de tout le plateau (Échap)"
+
+msgid "These expenses are shared by the whole plate. For this part, the travels count only from one of its lines to another of its lines in the same layer."
+msgstr "Ces dépenses sont communes à tout le plateau. Pour cette pièce, les trajets ne comptent que d’une de ses lignes à une autre de ses lignes, dans la même couche."
+
+msgid "Slicing Result for %1%"
+msgstr "Résultat de la découpe pour %1%"
+
+msgid "Not counted for this part:"
+msgstr "Non compté pour cette pièce :"
+
+msgid "travels between parts"
+msgstr "trajets entre pièces"
+
+msgid "prime tower"
+msgstr "tour de purge"
+
+msgid "purges"
+msgstr "purges"
+
+msgid "start of the print"
+msgstr "début d’impression"
+
+
+msgid "time / material"
+msgstr "temps / matière"
+
+msgid "Support settings"
+msgstr "Réglages des supports"
+
+msgid "Add a sheet to plate %1%"
+msgstr "Ajouter un feuillet à la plaque %1%"

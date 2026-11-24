@@ -32,6 +32,8 @@ namespace Slic3r {
             // Orio : tranchages memorises pour le bouton "tranchage precedent" de la legende
             struct SliceSnapshot;
             struct SliceHistory;
+            // Orio : statistiques de l'objet clique dans l'Apercu, pour la legende
+            struct PickedStats;
             enum class EViewType : unsigned char
             {
                 Summary = 0,
@@ -158,8 +160,10 @@ namespace Slic3r {
                 bool can_hide_object(int label) const { return m_object_labels.count(label) > 0; }
                 bool is_object_hidden(int label) const { return m_hidden_object_labels.count(label) > 0; }
                 void set_object_hidden(int label, bool hidden) { if (hidden) m_hidden_object_labels.insert(label); else m_hidden_object_labels.erase(label); }
-                // Orio : objet clique dans l'Apercu, analyse par l'encart de la vue "Fusion de couche"
-                void set_layer_fusion_label(int label) { m_layer_fusion_label = label; }
+                // Orio : objet clique dans l'Apercu (label du G-code, -1 : aucun) : ses statistiques dans la
+                // legende, l'encart de la vue "Fusion de couche"
+                int  get_picked_label() const { return m_picked_label; }
+                void set_picked_label(int label) { m_picked_label = label; }
 
                 //BBS: add all plates filament statistics
                 void render_all_plates_stats(const std::vector<const GCodeProcessorResult*>& gcode_result_list, bool show = true) const;
@@ -239,6 +243,9 @@ namespace Slic3r {
                 // Orio : bouton "tranchage precedent" de la legende. update_slice_history() memorise le
                 // tranchage affiche (par plateau) et renvoie le precedent de ce plateau, ou nullptr.
                 SliceSnapshot* update_slice_history();
+                // Orio : statistiques de l'objet clique (m_picked_stats), calculees une fois par tranchage et par
+                // objet ; false : aucun objet clique
+                bool update_picked_stats();
                 // Echange les donnees affichees par la legende avec celles de l'instantane (2e appel = retour)
                 void swap_with_slice_snapshot(SliceSnapshot& snapshot);
                 // Bouton maintenu = tranchage precedent affiche ; sur sa propre ligne (bas de la legende), a
@@ -290,7 +297,7 @@ namespace Slic3r {
                 // Orio : vue "Fusion de couche" : calcul en arriere-plan, et ses valeurs deja passees aux trajets
                 LayerFusion m_layer_fusion;
                 bool m_layer_fusion_ready{ false };
-                int  m_layer_fusion_label{ -1 };
+                int  m_picked_label{ -1 };
                 // Derniere coupe X/Y choisie a la main (xmin, xmax, ymin, ymax), en coordonnees du plateau,
                 // et bornes qui coupaient. Survit a reset() : reprise a chaque nouveau tranchage si elle tombe
                 // dans l'etendue des trajets ; seul un geste de l'utilisateur la modifie. Une par plateau
@@ -356,6 +363,7 @@ namespace Slic3r {
                 ETools m_tools;
                 // Orio : dernier tranchage affiche et le precedent, par plateau (bouton de la legende)
                 std::shared_ptr<SliceHistory> m_slice_history;
+                std::shared_ptr<PickedStats> m_picked_stats;
             };
 
             class GCodeWindow

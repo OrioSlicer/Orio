@@ -126,6 +126,8 @@ class ParamsPanel : public wxPanel
 
         ScalableButton*		m_search_btn { nullptr };
         ScalableButton*		m_compare_btn { nullptr };
+        //Orio: sheet of the current plate, as the button at the right of the plate (in place of the Advance switch)
+        ScalableButton*		m_sheet_btn { nullptr };
 
         wxBitmap m_toggle_on_icon;
         wxBitmap m_toggle_off_icon;

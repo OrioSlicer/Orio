@@ -409,11 +409,16 @@ namespace Slic3r {
                     p_renderer->set_object_hidden(label, hidden);
                 }
             }
-            void GCodeViewer::set_layer_fusion_label(int label)
+            int GCodeViewer::get_picked_label() const
+            {
+                const auto& p_renderer = get_renderer();
+                return p_renderer ? p_renderer->get_picked_label() : -1;
+            }
+            void GCodeViewer::set_picked_label(int label)
             {
                 const auto& p_renderer = get_renderer();
                 if (p_renderer) {
-                    p_renderer->set_layer_fusion_label(label);
+                    p_renderer->set_picked_label(label);
                 }
             }
             void GCodeViewer::set_scale(float scale)

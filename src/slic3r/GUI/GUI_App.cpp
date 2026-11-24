@@ -6707,22 +6707,16 @@ Tab* GUI_App::get_layer_tab()
     return model_tabs_list[2];
 }
 
+//Orio: no Simple mode: all the settings are always shown (the "Advance" switch is gone), the groups folded with
+// their chevrons. The Developer mode stays (Preferences).
 ConfigOptionMode GUI_App::get_mode()
 {
-    if (!app_config->has("user_mode"))
-        return comSimple;
-    //BBS
-    const auto mode = app_config->get("user_mode");
-    return mode == "advanced" ? comAdvanced :
-           mode == "simple" ? comSimple :
-           mode == "develop" ? comDevelop : comSimple;
+    return app_config->get("user_mode") == "develop" ? comDevelop : comAdvanced;
 }
 
 std::string GUI_App::get_mode_str()
 {
-    if (!app_config->has("user_mode"))
-        return "simple";
-    return app_config->get("user_mode");
+    return get_mode() == comDevelop ? "develop" : "advanced";
 }
 
 void GUI_App::save_mode(const /*ConfigOptionMode*/int mode)

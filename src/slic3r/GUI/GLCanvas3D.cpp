@@ -3560,7 +3560,7 @@ void GLCanvas3D::render(bool only_init)
         _render_platelist(!camera.is_looking_downward(), only_current, true, hover_id);
         // BBS: GUI refactor: add canvas size as parameters
         _render_gcode(cnv_size.get_width(), cnv_size.get_height());
-        _render_layer_fusion_frame();
+        _render_picked_object_frame();
     }
     /* assemble render*/
     else if (m_canvas_type == ECanvasType::CanvasAssembleView) {
@@ -5196,7 +5196,15 @@ void GLCanvas3D::on_char(wxKeyEvent& evt)
 #ifdef __APPLE__
         case WXK_BACK: { post_event(SimpleEvent(EVT_GLTOOLBAR_DELETE)); break; }
 #endif
-        case WXK_ESCAPE: { deselect_all(); break; }
+        case WXK_ESCAPE: {
+            // Orio : Apercu, Echap rend la legende au plateau entier (objet choisi au clic)
+            if (m_canvas_type == CanvasPreview && get_gcode_viewer().get_picked_label() >= 0) {
+                get_gcode_viewer().set_picked_label(-1);
+                set_as_dirty();
+            } else
+                deselect_all();
+            break;
+        }
         //case WXK_F5: {
         //    if ((wxGetApp().is_editor() && !wxGetApp().plater()->model().objects.empty()) ||
         //        (wxGetApp().is_gcode_viewer() && !wxGetApp().plater()->get_last_loaded_gcode().empty()))
@@ -6618,13 +6626,17 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
             m_selection.stop_dragging();
             m_rotation_center(0) = m_rotation_center(1) = m_rotation_center(2) = 0.f;
         }
-        // Orio : Apercu, un clic (sans tourner la vue) sur un objet le choisit pour l'encart de la vue
-        // "Fusion de couche" (objet sous la souris : celui de l'oeil, _render_object_hide_eye)
-        if (evt.LeftUp() && m_canvas_type == ECanvasType::CanvasPreview && m_hide_eye_label >= 0 && !m_mouse.dragging &&
+        // Orio : Apercu, un clic (sans tourner la vue) sur un objet le choisit : cadre blanc, son oeil garde, ses
+        // statistiques dans la legende, l'encart de la vue "Fusion de couche". Un clic sur lui ou dans le vide (Echap
+        // aussi) rend la legende au plateau. Objet sous la souris : _render_object_hide_eye.
+        if (evt.LeftUp() && m_canvas_type == ECanvasType::CanvasPreview && !m_mouse.dragging &&
             !m_mouse.rotating && !m_mouse.panning && !m_mouse.ignore_left_up) {
-            m_layer_fusion_label = m_hide_eye_label;
-            get_gcode_viewer().set_layer_fusion_label(m_hide_eye_label);
-            set_as_dirty();
+            gcode::GCodeViewer &viewer = get_gcode_viewer();
+            const int           picked = viewer.get_picked_label();
+            if (m_hover_pick_label >= 0 || picked >= 0) {
+                viewer.set_picked_label(m_hover_pick_label == picked ? -1 : m_hover_pick_label);
+                set_as_dirty();
+            }
         }
 
         if (m_layers_editing.state != LayersEditing::Unknown) {
@@ -10028,12 +10040,16 @@ void GLCanvas3D::_check_and_update_toolbar_icon_scale()
 
     float top_tb_width = collapse_toolbar_width;
     int items_cnt = collapse_toolbar.get_visible_items_cnt();
+    int main_items_cnt = 0;
     if (p_main_toolbar) {
         top_tb_width += p_main_toolbar->get_width();
-        items_cnt += p_main_toolbar->get_visible_items_cnt();
+        main_items_cnt = p_main_toolbar->get_visible_items_cnt();
+        items_cnt += main_items_cnt;
     }
 
-    float noitems_width = top_tb_width - size * items_cnt; // width of separators and borders in top toolbars
+    //Orio: the icons of the main toolbar are at size * user_factor (size chosen by dragging its sides): without them the
+    // automatic scale would bring a toolbar filling the width of the view back to that width, the drag doing nothing.
+    float noitems_width = top_tb_width - size * (items_cnt - main_items_cnt) - size * user_factor * main_items_cnt; // width of separators and borders in top toolbars
 
     // calculate scale needed for items in all top toolbars
 #ifdef __WINDOWS__
@@ -12888,17 +12904,18 @@ void GLCanvas3D::_render_stale_slice_card()
 // toolpaths (supports and brim included, in its label of the G-code), only its shell stays, very faint; hovering it shows the
 // eye again. Objects are labeled in the G-code only from 2 to 64 instances (GCode.cpp), and only the advanced renderer filters
 // by object: elsewhere no eye (can_hide_object).
-// Orio : vue "Fusion de couche", l'objet clique (celui de l'encart) dans le cadre blanc de la selection de la Preparation
-void GLCanvas3D::_render_layer_fusion_frame()
+// Orio : l'objet clique dans l'Apercu, dans le cadre blanc de la selection de la Preparation
+void GLCanvas3D::_render_picked_object_frame()
 {
-    if (m_layer_fusion_label < 0 || get_gcode_viewer().get_view_type() != gcode::EViewType::LayerFusion)
+    const int label = get_gcode_viewer().get_picked_label();
+    if (label < 0 || !get_gcode_viewer().can_hide_object(label))
         return;
     const ModelObjectPtrs &objects = wxGetApp().model().objects;
     BoundingBoxf3          box;
     for (const GLVolume *v : get_gcode_viewer().get_shells().volumes.volumes) {
         const int o = v->object_idx(), i = v->instance_idx();
         if (!v->is_wipe_tower && o >= 0 && o < int(objects.size()) && i >= 0 && i < int(objects[o]->instances.size()) &&
-            int(objects[o]->instances[i]->get_labeled_id()) == m_layer_fusion_label)
+            int(objects[o]->instances[i]->get_labeled_id()) == label)
             box.merge(v->transformed_bounding_box());
     }
     if (!box.defined)
@@ -12917,6 +12934,7 @@ void GLCanvas3D::_render_object_hide_eye()
     const std::array<float, 4> last_eye    = m_hide_eye_rect;
     const std::array<float, 4> last_object = m_hide_eye_object_rect;
     m_hide_eye_label                       = -1;
+    m_hover_pick_label                     = -1;
     m_hide_eye_rect = m_hide_eye_object_rect = { { 0.f, 0.f, 0.f, 0.f } };
     if (m_canvas_type != CanvasPreview || !wxGetApp().is_editor() || wxGetApp().plater()->only_gcode_mode())
         return;
@@ -12978,15 +12996,10 @@ void GLCanvas3D::_render_object_hide_eye()
     const auto  inside = [&mouse](const std::array<float, 4> &r) {
         return r[0] < r[2] && r[0] <= mouse.x() && mouse.x() <= r[2] && r[1] <= mouse.y() && mouse.y() <= r[3];
     };
-    if (mouse.x() < 0. || mouse.y() < 0. || m_mouse.dragging)
-        return;
-    const Camera &camera = get_active_camera();
-    int           label  = -1;
-    if (last_label >= 0 && inside(last_eye))
-        // On its eye: the object stays, whatever is under the eye.
-        label = last_label;
-    else if (!wxGetApp().imgui()->want_mouse()) {
-        // The nearest hideable object under the mouse.
+    const Camera &camera   = get_active_camera();
+    const bool    mouse_in = mouse.x() >= 0. && mouse.y() >= 0. && !m_mouse.dragging;
+    // The nearest hideable object under the mouse (the one a click picks), not looked for on its eye.
+    if (mouse_in && !(last_label >= 0 && inside(last_eye)) && !wxGetApp().imgui()->want_mouse()) {
         double nearest = std::numeric_limits<double>::max();
         for (const GLVolume *v : shells) {
             int                l;
@@ -12999,10 +13012,24 @@ void GLCanvas3D::_render_object_hide_eye()
                 continue;
             const double depth = (matrix * position.cast<double>() - camera.get_position()).dot(camera.get_dir_forward());
             if (depth < nearest) {
-                nearest = depth;
-                label   = l;
+                nearest            = depth;
+                m_hover_pick_label = l;
             }
         }
+    }
+    // Orio : the object picked by a click keeps its eye, wherever the mouse is, and the other objects show none (parts placed
+    // inside a ring hide its eye, at its center, otherwise).
+    const int picked = viewer.get_picked_label();
+    int       label  = -1;
+    if (picked >= 0 && viewer.can_hide_object(picked))
+        label = picked;
+    else if (!mouse_in)
+        return;
+    else if (last_label >= 0 && inside(last_eye))
+        // On its eye: the object stays, whatever is under the eye.
+        label = last_label;
+    else if (!wxGetApp().imgui()->want_mouse()) {
+        label = m_hover_pick_label;
         // Nothing under the mouse, within the object on the screen (the hole of a ring, around its center): towards its eye.
         if (label < 0 && last_label >= 0 && inside(last_object))
             label = last_label;

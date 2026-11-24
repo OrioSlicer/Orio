@@ -9,6 +9,7 @@
 #include "Widgets/StaticLine.hpp"
 
 #include <utility>
+#include <set>
 #include <wx/bookctrl.h>
 #include <wx/numformatter.h>
 #include <boost/algorithm/string/split.hpp>
@@ -25,6 +26,17 @@ constexpr int titleWidth = 20;
 
 // Orio: section of the app config holding the folded settings sections (OptionsGroup::collapse_key).
 static const std::string COLLAPSED_SECTIONS = "collapsed_sections";
+// Orio: "1" folded, "0" unfolded; a section without a state is folded, except these ones (page / section, in English).
+static bool section_collapsed(const std::string &collapse_key)
+{
+    const std::string state = wxGetApp().app_config->get(COLLAPSED_SECTIONS, collapse_key);
+    if (!state.empty())
+        return state != "0";
+    static const std::set<std::string> unfolded = {"Quality/Layer height", "Strength/Walls", "Strength/Sparse infill",
+                                                   "Speed/Initial layer speed", "Support/Support", "Support/Support settings",
+                                                   "Others/Bed adhension"};
+    return unfolded.count(collapse_key) == 0;
+}
 
 const t_field& OptionsGroup::build_field(const Option& opt) {
     return build_field(opt.opt_id, opt.opt);
@@ -238,10 +250,7 @@ void OptionsGroup::set_collapsed(bool collapsed)
     if (collapsed == m_collapsed || collapse_key.empty())
         return;
     m_collapsed = collapsed;
-    if (collapsed)
-        wxGetApp().app_config->set(COLLAPSED_SECTIONS, collapse_key, std::string("1"));
-    else
-        wxGetApp().app_config->erase(COLLAPSED_SECTIONS, collapse_key);
+    wxGetApp().app_config->set(COLLAPSED_SECTIONS, collapse_key, std::string(collapsed ? "1" : "0"));
     if (sizer == nullptr)
         return;
     if (auto line = dynamic_cast<::StaticLine*>(stb)) {
@@ -567,7 +576,7 @@ bool OptionsGroup::activate(std::function<void()> throw_if_canceled/* = [](){}*/
 			    sizer->AddSpacer(8);
                 //Orio: the section folds under its title, as it was left.
                 if (!collapse_key.empty()) {
-                    m_collapsed = wxGetApp().app_config->has(COLLAPSED_SECTIONS, collapse_key);
+                    m_collapsed = section_collapsed(collapse_key);
                     stl->SetCollapse(m_collapsed, [this]() { set_collapsed(!m_collapsed); });
                     stl->SetToolTip(m_collapsed ? _L("Expand the section") : _L("Collapse the section"));
                 }

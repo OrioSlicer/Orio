@@ -439,6 +439,9 @@ void Tab::create_preset_tab()
         m_mode_view = new SwitchButton(m_top_panel, wxID_ABOUT);
         m_top_sizer->AddSpacer(4);
         m_top_sizer->Add( m_mode_view, 0, wxALIGN_CENTER_VERTICAL);
+        //Orio: always the advanced mode (GUI_App::get_mode()): no switch
+        m_static_title->Hide();
+        m_mode_view->Hide();
     }
 
     m_top_sizer->AddSpacer(FromDIP(16));
@@ -3212,7 +3215,8 @@ void TabPrint::build()
         optgroup->append_single_option_line("support_ironing_direction");
 
         //BBS
-        optgroup = page->new_optgroup(L("Advanced"), L"param_advanced");
+        //Orio: "Support settings" (was "Advanced").
+        optgroup = page->new_optgroup(L("Support settings"), L"param_advanced");
         optgroup->append_single_option_line("raft_first_layer_density");   // not only for raft, but for support too
         optgroup->append_single_option_line("raft_first_layer_expansion"); // not only for raft, but for support too
         optgroup->append_single_option_line("tree_support_wall_count");

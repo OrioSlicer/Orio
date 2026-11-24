@@ -583,6 +583,20 @@ ParamsPanel::ParamsPanel( wxWindow* parent, wxWindowID id, const wxPoint& pos, c
 
         m_title_view = new Label(m_top_panel, _L("Advance"));
         m_mode_view = new SwitchButton(m_top_panel, wxID_ABOUT);
+        //Orio: always the advanced mode (GUI_App::get_mode()): no switch, a button adding a sheet to the plate instead
+        m_title_view->Hide();
+        m_mode_view->Hide();
+        m_sheet_btn = new ScalableButton(m_top_panel, wxID_ANY, "plate_process_add", wxEmptyString, wxDefaultSize, wxDefaultPosition,
+                                         wxBU_EXACTFIT | wxNO_BORDER, true, 20);
+        m_sheet_btn->Bind(wxEVT_ENTER_WINDOW, [this](wxMouseEvent &e) {
+            const int plate = wxGetApp().plater()->get_partplate_list().get_curr_plate_index();
+            m_sheet_btn->SetToolTip(format_wxstr(_L("Add a sheet to plate %1%"), plate + 1));
+            e.Skip();
+        });
+        m_sheet_btn->Bind(wxEVT_BUTTON, [](wxCommandEvent &) {
+            Plater *plater = wxGetApp().plater();
+            plater->create_plate_sheet(plater->get_partplate_list().get_curr_plate_index());
+        });
 
         // BBS: new layout
         //m_search_btn = new ScalableButton(m_top_panel, wxID_ANY, "search", wxEmptyString, wxDefaultSize, wxDefaultPosition, wxBU_EXACTFIT | wxNO_BORDER, true);
@@ -736,9 +750,7 @@ void ParamsPanel::create_layout()
         m_mode_sizer->Add(m_objects_btn, 0, wxALIGN_CENTER | wxLEFT, FromDIP(6));
         m_mode_sizer->Add(m_tips_arrow, 0, wxALIGN_CENTER | wxLEFT, FromDIP(4));
         m_mode_sizer->AddStretchSpacer(1);
-        m_mode_sizer->Add( m_title_view, 0, wxALIGN_CENTER );
-        m_mode_sizer->AddSpacer(FromDIP(2));
-        m_mode_sizer->Add(m_mode_view, 0, wxALIGN_CENTER);
+        m_mode_sizer->Add(m_sheet_btn, 0, wxALIGN_CENTER);
         m_mode_sizer->AddSpacer(FromDIP(12));
         m_mode_sizer->Add(m_compare_btn, 0, wxALIGN_CENTER);
         m_mode_sizer->AddSpacer(FromDIP(16));
@@ -1037,6 +1049,7 @@ void ParamsPanel::msw_rescale()
     if (m_process_icon) m_process_icon->msw_rescale();
     if (m_search_btn) m_search_btn->msw_rescale();
     if (m_compare_btn) m_compare_btn->msw_rescale();
+    if (m_sheet_btn) m_sheet_btn->msw_rescale();
     if (m_tips_arrow) m_tips_arrow->msw_rescale();
     if (m_left_sizer) m_left_sizer->SetMinSize(wxSize(40 * em_unit(this), -1));
     if (m_mode_sizer)
